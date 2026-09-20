@@ -24,10 +24,13 @@ async function loadImages(){
             const card = document.createElement('div');
             card.className = "gallery-item";
             const img = document.createElement('img');
-            img.src = 'photos/images/' + encodeURIComponent(name);
+            const thumbUrl = 'photos/images/thumb/' + encodeURIComponent(name);
+            const fullUrl  = 'photos/images/' + encodeURIComponent(name);
+            img.src = thumbUrl;
             img.loading = "lazy";
+            img.onerror = () => { img.src = fullUrl; };  // 没有缩略图就直接显示原图
             card.appendChild(img);
-            card.onclick = () => { lightboxImg.src = img.src; lightbox.style.display='flex'; };
+            card.onclick = () => { lightboxImg.src = fullUrl; lightbox.style.display='flex'; };
             galleryEl.appendChild(card);
         });
         if(files.length === 0)

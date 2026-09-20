@@ -96,11 +96,13 @@ if uri == "/api/upload" and method == "POST" then
     if not data or #data == 0 then return reply({ok=false, msg="未收到文件内容"}) end
     local name = (ngx.var.arg_name or ""):gsub("[^%w%.%-_]", "")
     if name == "" then return reply({ok=false, msg="文件名不合法"}) end
-	os.execute("mkdir -p " .. photo_dir)
-    local final = tostring(os.time()) .. "_" .. name   -- 加时间戳防覆盖
+    os.execute("mkdir -p " .. photo_dir .. "/thumb")
+    local final = tostring(os.time()) .. "_" .. name
     local f = io.open(photo_dir .. "/" .. final, "wb")
     if not f then return reply({ok=false, msg="无法写入图片目录"}) end
     f:write(data) f:close()
+    -- 生成缩略图
+    os.execute(string.format('magick "%s/%s" -resize 400x400 -quality 80 "%s/thumb/%s"', photo_dir, final, photo_dir, final))
     return reply({ok=true, name=final})
 end
 
