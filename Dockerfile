@@ -9,7 +9,7 @@ COPY setup.html ./
 COPY css ./css
 COPY js ./js
 
-# 拷贝lua脚本
+# 拷贝lua脚本（现在包含dkjson.lua）
 COPY lua /usr/share/nginx/lua
 # 拷贝nginx主配置
 COPY nginx.conf /usr/local/openresty/nginx/conf/nginx.conf
