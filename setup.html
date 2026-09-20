@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>初始化管理员账号</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#1a1a1a;color:#fff;font-family:system-ui;height:100vh;display:flex;align-items:center;justify-content:center}
+.box{width:340px;padding:30px;background:#292929;border-radius:12px}
+h2{text-align:center;margin-bottom:24px}
+input{width:100%;margin:8px 0;padding:12px;border-radius:8px;border:none;font-size:16px}
+button{width:100%;padding:12px;margin-top:12px;background:#10b981;color:#fff;border:none;border-radius:8px;font-size:16px;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="box">
+    <h2>首次部署，创建管理员账号</h2>
+    <input type="text" id="user" placeholder="管理员用户名">
+    <input type="password" id="pwd" placeholder="管理员密码">
+    <button onclick="setup()">创建账号并登录</button>
+    <div id="msg" style="color:#f87171;margin-top:12px;text-align:center"></div>
+</div>
+<script>
+async function setup(){
+    const u = document.getElementById('user').value;
+    const p = document.getElementById('pwd').value;
+    const res = await fetch('/api/setup',{
+        method:'POST',
+        body:new URLSearchParams({username:u,password:p})
+    })
+    const ret = await res.json();
+    if(ret.ok){
+        location.href="/index.html"
+    }else{
+        document.getElementById("msg").innerText = ret.msg
+    }
+}
+</script>
+</body>
+</html>

@@ -1,30 +1,23 @@
-# 基础镜像：轻量级 Nginx
-FROM nginx:alpine
+FROM openresty/openresty:alpine
+# 安装依赖：imagemagick生成缩略图、bcrypt密码哈希
+RUN apk add --no-cache imagemagick bcrypt
+WORKDIR /usr/share/nginx/html
 
-# 维护者信息
-LABEL maintainer="fanling1970"
-LABEL description="个人服务器相册 - 静态前端 + Nginx"
+# 拷贝前端静态资源
+COPY index.html ./
+COPY login.html ./
+COPY setup.html ./
+COPY css ./css
+COPY js ./js
 
-# 删除默认配置
-RUN rm /etc/nginx/conf.d/default.conf
+# 拷贝lua脚本
+COPY lua /usr/share/nginx/lua
+# 拷贝nginx主配置
+COPY nginx.conf /usr/local/openresty/nginx/conf/nginx.conf
 
-# 复制自定义 Nginx 配置
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# 配置目录，持久化挂载users.json
+RUN mkdir -p /usr/share/nginx/config
+VOLUME ["/usr/share/nginx/config", "/usr/share/nginx/html/photos"]
 
-# 复制相册前端代码到容器
-COPY index.html /usr/share/nginx/html/
-COPY css/ /usr/share/nginx/html/css/
-COPY js/ /usr/share/nginx/html/js/
-
-# 创建图片目录（运行时通过 volume 挂载覆盖）
-RUN mkdir -p /usr/share/nginx/html/img
-
-# 暴露端口
 EXPOSE 80
-
-# 健康检查
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --quiet --tries=1 --spider http://localhost/ || exit 1
-
-# 启动 Nginx
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["/usr/local/openresty/bin/openresty", "-g", "daemon off;"]
