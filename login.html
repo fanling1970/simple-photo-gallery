@@ -2,38 +2,41 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>登录 - 我的相册</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:#1a1a1a;color:#fff;font-family:system-ui;height:100vh;display:flex;align-items:center;justify-content:center}
+body{background:#1a1a1a;color:#fff;font-family:system-ui,sans-serif;height:100vh;display:flex;align-items:center;justify-content:center}
 .box{width:340px;padding:30px;background:#292929;border-radius:12px}
 h2{text-align:center;margin-bottom:24px}
-input{width:100%;margin:8px 0;padding:12px;border-radius:8px;border:none;font-size:16px}
+input{width:100%;margin:8px 0;padding:12px;border-radius:8px;border:none;font-size:16px;color:#111}
 button{width:100%;padding:12px;margin-top:12px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:16px;cursor:pointer}
+#msg{color:#f87171;margin-top:12px;text-align:center;min-height:20px}
 </style>
 </head>
 <body>
 <div class="box">
-    <h2>相册登录</h2>
-    <input type="text" id="user" placeholder="用户名">
-    <input type="password" id="pwd" placeholder="密码">
-    <button onclick="login()">登录</button>
-    <div id="msg" style="color:#f87171;margin-top:12px;text-align:center"></div>
+  <h2>相册登录</h2>
+  <input type="text" id="user" placeholder="用户名">
+  <input type="password" id="pwd" placeholder="密码" onkeydown="if(event.key==='Enter')login()">
+  <button id="btn" onclick="login()">登录</button>
+  <div id="msg"></div>
 </div>
 <script>
 async function login(){
-    const u = document.getElementById('user').value;
-    const p = document.getElementById('pwd').value;
-    const res = await fetch('/api/auth',{
-        method:'POST',
-        body:new URLSearchParams({username:u,password:p})
-    })
-    const ret = await res.json();
-    if(ret.ok){
-        location.href="/index.html"
-    }else{
-        document.getElementById("msg").innerText = ret.msg
-    }
+  const btn=document.getElementById('btn'),msg=document.getElementById('msg');
+  const u=document.getElementById('user').value.trim();
+  const p=document.getElementById('pwd').value;
+  msg.innerText='';
+  if(!u||!p){msg.innerText='请输入用户名和密码';return;}
+  btn.disabled=true;btn.innerText='登录中...';
+  try{
+    const res=await fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'username='+encodeURIComponent(u)+'&password='+encodeURIComponent(p)});
+    const ret=await res.json();
+    if(ret.ok){location.href='/index.html';}
+    else{msg.innerText=ret.msg||'登录失败';}
+  }catch(e){msg.innerText='请求失败: '+e.message;}
+  finally{btn.disabled=false;btn.innerText='登录';}
 }
 </script>
 </body>

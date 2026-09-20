@@ -8,7 +8,7 @@
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#1a1a1a;color:#fff;font-family:system-ui,sans-serif;height:100vh;display:flex;align-items:center;justify-content:center}
 .box{width:340px;padding:30px;background:#292929;border-radius:12px}
-h2{text-align:center;margin-bottom:24px}
+h2{text-align:center;margin-bottom:24px;font-size:20px}
 input{width:100%;margin:8px 0;padding:12px;border-radius:8px;border:none;font-size:16px;color:#111}
 button{width:100%;padding:12px;margin-top:12px;background:#10b981;color:#fff;border:none;border-radius:8px;font-size:16px;cursor:pointer}
 #msg{color:#f87171;margin-top:12px;text-align:center;min-height:20px}
@@ -16,31 +16,30 @@ button{width:100%;padding:12px;margin-top:12px;background:#10b981;color:#fff;bor
 </head>
 <body>
 <div class="box">
-    <h2>首次部署 · 创建管理员账号</h2>
-    <input type="text" id="user" placeholder="管理员用户名">
-    <input type="password" id="pwd" placeholder="管理员密码(至少4位)">
-    <button id="btn" onclick="setup()">创建账号并登录</button>
-    <div id="msg"></div>
+  <h2>首次部署 · 创建管理员账号</h2>
+  <input type="text" id="user" placeholder="管理员用户名">
+  <input type="password" id="pwd" placeholder="密码(至少4位)" onkeydown="if(event.key==='Enter')setup()">
+  <input type="password" id="pwd2" placeholder="再次输入密码" onkeydown="if(event.key==='Enter')setup()">
+  <button id="btn" onclick="setup()">创建账号并登录</button>
+  <div id="msg"></div>
 </div>
 <script>
 async function setup(){
-    const btn=document.getElementById('btn'), msg=document.getElementById('msg');
-    const u=document.getElementById('user').value.trim();
-    const p=document.getElementById('pwd').value;
-    msg.innerText='';
-    if(!u || p.length<4){ msg.innerText='请输入用户名和至少4位密码'; return; }
-    btn.disabled=true; btn.innerText='提交中...';
-    try{
-        const res=await fetch('/api/setup',{
-            method:'POST',
-            headers:{'Content-Type':'application/x-www-form-urlencoded'},
-            body:'username='+encodeURIComponent(u)+'&password='+encodeURIComponent(p)
-        });
-        const text=await res.text();
-        let ret; try{ ret=JSON.parse(text); }catch(e){ ret={ok:false,msg:'响应异常: '+text}; }
-        if(ret.ok){ location.href='/index.html'; } else { msg.innerText=ret.msg||'创建失败'; }
-    }catch(e){ msg.innerText='请求失败: '+e.message; }
-    finally{ btn.disabled=false; btn.innerText='创建账号并登录'; }
+  const btn=document.getElementById('btn'),msg=document.getElementById('msg');
+  const u=document.getElementById('user').value.trim();
+  const p=document.getElementById('pwd').value;
+  const p2=document.getElementById('pwd2').value;
+  msg.innerText='';
+  if(!u||p.length<4){msg.innerText='请输入用户名和至少4位密码';return;}
+  if(p!==p2){msg.innerText='两次密码不一致，请重新输入';return;}
+  btn.disabled=true;btn.innerText='提交中...';
+  try{
+    const res=await fetch('/api/setup',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'username='+encodeURIComponent(u)+'&password='+encodeURIComponent(p)});
+    const ret=await res.json();
+    if(ret.ok){location.href='/index.html';}
+    else{msg.innerText=ret.msg||'创建失败';}
+  }catch(e){msg.innerText='请求失败: '+e.message;}
+  finally{btn.disabled=false;btn.innerText='创建账号并登录';}
 }
 </script>
 </body>
