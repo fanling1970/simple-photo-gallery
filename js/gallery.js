@@ -57,9 +57,29 @@ function closeViewer(){
 }
 
 function go(dir){
+    const old = lbContent.firstChild;
+    if(old){
+        old.style.transition = 'transform .3s ease';
+        old.style.transform = `translateX(${dir > 0 ? -window.innerWidth : window.innerWidth}px)`;
+    }
     viewerIndex = (viewerIndex + dir + viewerList.length) % viewerList.length;
-    lbContent.style.opacity = 0;
-    setTimeout(()=>{ renderViewer(); lbContent.style.opacity = 1; }, 200);
+    setTimeout(()=>{
+        const name = viewerList[viewerIndex];
+        const full = 'photos/images/' + encodeURIComponent(name);
+        lbContent.innerHTML = '';
+        let el;
+        if(isVideoName(name)){ el = document.createElement('video'); el.src=full; el.controls=true; el.autoplay=true; }
+        else { el = document.createElement('img'); el.src=full; }
+        el.className = 'lightbox-img';
+        el.style.transition = 'none';
+        el.style.transform = `translateX(${dir > 0 ? window.innerWidth : -window.innerWidth}px)`;
+        lbContent.appendChild(el);
+        requestAnimationFrame(()=>{
+            el.style.transition = 'transform .3s ease';
+            el.style.transform = 'translateX(0) scale(1)';
+        });
+        scale = 1; offX = 0; offY = 0;
+    }, 300);
 }
 
 closeBtn.onclick = closeViewer;

@@ -74,55 +74,77 @@ if uri == "/api/auth" and method == "POST" then
     return reply({ok=false, msg="用户名或密码错误"})
 end
 
--- 图片列表（扫描 photos 目录）
+-- 图片/视频列表（扫描 photos 目录）
 if uri == "/api/list" then
     local p = io.popen("ls -1 " .. photo_dir .. " 2>/dev/null")
     local out = p:read("*a") p:close()
     local files = {}
-	local function is_media(n)
-		return n:match("%.[jJ][pP][eE]?[gG]$") or n:match("%.[pP][nN][gG]$")
+    local function is_media(n)
+        return n:match("%.[jJ][pP][eE]?[gG]$") or n:match("%.[pP][nN][gG]$")
             or n:match("%.[gG][iI][fF]$") or n:match("%.[wW][eE][bB][pP]$")
-			or n:match("%.[mM][pP]4$") or n:match("%.[wW][eE][bB][mM]$")
-			or n:match("%.[mM][oO][vV]$") or n:match("%.[mM][kK][vV]$")
+            or n:match("%.[mM][pP]4$") or n:match("%.[wW][eE][bB][mM]$")
+            or n:match("%.[mM][oO][vV]$") or n:match("%.[mM][kK][vV]$")
     end
-	for line in out:gmatch("[^\n]+") do
-	    if is_media(line) then files[#files+1] = line end
+    for line in out:gmatch("[^\n]+") do
+        if is_media(line) then files[#files+1] = line end
     end
+    return reply(files)
 end
 
 -- 时间线：按年月分组（优先EXIF，其次文件名时间戳，最后文件修改时间），带磁盘缓存
 if uri == "/api/timeline" then
     local cache_path = config_path:gsub("users%.json", "timeline_cache.json")
-    -- 1) 有缓存直接返回
     local cf = io.open(cache_path, "r")
     if cf then
         local data = cf:read("*a") cf:close()
         ngx.print(data)
         return ngx.exit(200)
     end
-    -- 2) 无缓存才扫盘
+    local function is_video(n)
+        return n:match("%.[mM][pP]4$") or n:match("%.[wW][eE][bB][mM]$")
+            or n:match("%.[mM][oO][vV]$") or n:match("%.[mM][kK][vV]$")
+    end
+    local function is_media(n)
+        return n:match("%.[jJ][pP][eE]?[gG]$") or n:match("%.[pP][nN][gG]$")
+            or n:match("%.[gG][iI][fF]$") or n:match("%.[wW][eE][bB][pP]$")
+            or is_video(n)
+    end
     local p = io.popen("ls -1 " .. photo_dir .. " 2>/dev/null")
     local out = p:read("*a") p:close()
     local groups = {}
     for line in out:gmatch("[^\n]+") do
-        local is_video = line:match("%.[mM][pP]4$") or line:match("%.[wW][eE][bB][mM]$")
-		              or line:match("%.[mM][oO][vV]$") or line:match("%.[mM][kK][vV]$")
-		if not is_video then
-            local h = io.popen('identify -format "%[EXIF:DateTimeOriginal]" "' .. path .. '" 2>/dev/null')
-            local exif = h:read("*a") h:close()
-            if exif and exif ~= "" then
-                local y, m = exif:match("(%d+):(%d+):%d+")
-                if y and m then ym = y .. "-" .. m end
+        if is_media(line) then
+            local path = photo_dir .. "/" .. line
+            local ym
+            if not is_video(line) then
+                local h = io.popen('identify -format "%[EXIF:DateTimeOriginal]" "' .. path .. '" 2>/dev/null')
+                local exif = h:read("*a") h:close()
+                if exif and exif ~= "" then
+                    local y, m = exif:match("(%d+):(%d+):%d+")
+                    if y and m then ym = y .. "-" .. m end
+                end
             end
+            if not ym then
+                local ts = line:match("^(%d+)_")
+                if ts then
+                    local d = os.date("*t", tonumber(ts))
+                    ym = string.format("%04d-%02d", d.year, d.month)
+                end
+            end
+            if not ym then
+                local h2 = io.popen('ls -l --time-style=+%Y-%m "' .. path .. '" 2>/dev/null')
+                local m = h2:read("*a") h2:close()
+                ym = m:match("(%d%d%d%d%-%d%d)") or "未知"
+            end
+            groups[ym] = groups[ym] or {}
+            table.insert(groups[ym], line)
         end
     end
-    -- 3) 写缓存
     local wf = io.open(cache_path, "w")
     if wf then wf:write(dkjson.encode(groups)) wf:close() end
     return reply(groups)
 end
 
--- 图片上传（二进制直传）
 if uri == "/api/upload" and method == "POST" then
     if not is_logged_in() then return reply({ok=false, msg="未登录"}) end
     ngx.req.read_body()
@@ -135,10 +157,12 @@ if uri == "/api/upload" and method == "POST" then
     local f = io.open(photo_dir .. "/" .. final, "wb")
     if not f then return reply({ok=false, msg="无法写入图片目录"}) end
     f:write(data) f:close()
-    -- 生成缩略图
-    os.execute(string.format('magick "%s/%s" -resize 400x400 -quality 80 "%s/thumb/%s"', photo_dir, final, photo_dir, final))
+    local is_v = final:match("%.[mM][pP]4$") or final:match("%.[wW][eE][bB][mM]$")
+              or final:match("%.[mM][oO][vV]$") or final:match("%.[mM][kK][vV]$")
+    if not is_v then
+        os.execute(string.format('magick "%s/%s" -resize 400x400 -quality 80 "%s/thumb/%s"', photo_dir, final, photo_dir, final))
+    end
     os.execute("rm -f '" .. config_path:gsub("users%.json", "timeline_cache.json") .. "'")
-	return reply({ok=true, name=final})
+    return reply({ok=true, name=final})
 end
 
-return reply({ok=false, msg="未知接口"})
