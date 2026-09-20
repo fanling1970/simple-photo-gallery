@@ -1,5 +1,6 @@
 local ngx = require "ngx"
 local dkjson = require "dkjson"
+local sha2 = require "sha2"
 
 local config_path = "/usr/share/nginx/config/users.json"
 
@@ -25,9 +26,8 @@ local function write_users(u)
     return true
 end
 
-local function sha(s)
-    return ngx.encode_base16(ngx.sha256_bin(s)):lower()
-end
+local function sha(s) return sha2.hex(s) end
+
 
 ngx.req.read_body()
 local args = ngx.req.get_post_args()
