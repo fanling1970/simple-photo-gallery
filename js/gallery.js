@@ -17,7 +17,6 @@ const timelineView = document.getElementById('timelineView');
 
 const isVideoName = n => /\.(mp4|webm|mov|mkv|avi)$/i.test(n);
 
-// ===== 查看器状态 =====
 let viewerList = [], viewerIndex = 0;
 let scale = 1, offX = 0, offY = 0;
 let dragging = false, moved = false, startX = 0, startY = 0;
@@ -27,10 +26,8 @@ function applyTransform(){
     if(el) el.style.transform = `translate(${offX}px,${offY}px) scale(${scale})`;
 }
 
-function renderViewer(){
-    const name = viewerList[viewerIndex];
+function makeViewerEl(name){
     const full = 'photos/images/' + encodeURIComponent(name);
-    lbContent.innerHTML = '';
     let el;
     if(isVideoName(name)){
         el = document.createElement('video');
@@ -39,6 +36,16 @@ function renderViewer(){
         el = document.createElement('img');
         el.src = full;
     }
+    el.className = 'lightbox-img';
+    el.draggable = false;
+    el.addEventListener('dragstart', e => e.preventDefault());
+    return el;
+}
+
+function renderViewer(){
+    const name = viewerList[viewerIndex];
+    lbContent.innerHTML = '';
+    const el = makeViewerEl(name);
     lbContent.appendChild(el);
     scale = 1; offX = 0; offY = 0;
     applyTransform();
@@ -56,30 +63,27 @@ function closeViewer(){
     lbContent.innerHTML = '';
 }
 
+// 同时滑动：老图出、新图进
 function go(dir){
     const old = lbContent.firstChild;
+    const nextIndex = (viewerIndex + dir + viewerList.length) % viewerList.length;
+    const name = viewerList[nextIndex];
+    const el = makeViewerEl(name);
+    el.style.transition = 'none';
+    el.style.transform = `translateX(${dir > 0 ? window.innerWidth : -window.innerWidth}px)`;
+    lbContent.appendChild(el);
+    void el.offsetWidth; // 强制 reflow
+    el.style.transition = 'transform .3s ease';
+    el.style.transform = 'translateX(0) scale(1)';
     if(old){
         old.style.transition = 'transform .3s ease';
         old.style.transform = `translateX(${dir > 0 ? -window.innerWidth : window.innerWidth}px)`;
     }
-    viewerIndex = (viewerIndex + dir + viewerList.length) % viewerList.length;
     setTimeout(()=>{
-        const name = viewerList[viewerIndex];
-        const full = 'photos/images/' + encodeURIComponent(name);
-        lbContent.innerHTML = '';
-        let el;
-        if(isVideoName(name)){ el = document.createElement('video'); el.src=full; el.controls=true; el.autoplay=true; }
-        else { el = document.createElement('img'); el.src=full; }
-        el.className = 'lightbox-img';
-        el.style.transition = 'none';
-        el.style.transform = `translateX(${dir > 0 ? window.innerWidth : -window.innerWidth}px)`;
-        lbContent.appendChild(el);
-        requestAnimationFrame(()=>{
-            el.style.transition = 'transform .3s ease';
-            el.style.transform = 'translateX(0) scale(1)';
-        });
+        if(old) old.remove();
+        viewerIndex = nextIndex;
         scale = 1; offX = 0; offY = 0;
-    }, 300);
+    }, 320);
 }
 
 closeBtn.onclick = closeViewer;
@@ -97,10 +101,11 @@ lightbox.addEventListener('wheel', e => {
 
 // 拖拽平移 / 点击复位
 lbContent.addEventListener('mousedown', e => {
-    if(e.target.tagName === 'VIDEO') return;
+    e.preventDefault();
     dragging = true; moved = false;
     startX = e.clientX - offX; startY = e.clientY - offY;
 });
+lbContent.addEventListener('dragstart', e => e.preventDefault());
 window.addEventListener('mousemove', e => {
     if(!dragging) return;
     const dx = e.clientX - startX, dy = e.clientY - startY;
@@ -109,11 +114,13 @@ window.addEventListener('mousemove', e => {
     applyTransform();
 });
 window.addEventListener('mouseup', () => {
-    if(dragging && !moved && scale > 1){ scale = 1; offX = 0; offY = 0; applyTransform(); }
+    if(dragging && !moved && scale > 1){
+        scale = 1; offX = 0; offY = 0; applyTransform();
+    }
     dragging = false;
 });
 
-// ===== 通用卡片 =====
+// ===== 卡片 =====
 function makeCard(name){
     const card = document.createElement('div');
     card.className = 'gallery-item';
@@ -131,7 +138,6 @@ function makeCard(name){
     return card;
 }
 
-// ===== 索引图库 =====
 async function loadIndex(){
     const res = await fetch('/api/list');
     viewerList = await res.json();
@@ -141,7 +147,6 @@ async function loadIndex(){
         indexView.innerHTML = '<p style="color:#aaa;text-align:center;width:100%">暂无图片/视频，点右上角上传</p>';
 }
 
-// ===== 时间线图库 =====
 let railHideTimer = null;
 function buildRail(years){
     const rail = document.getElementById('timelineRail');
@@ -189,7 +194,6 @@ function armRailHover(){
     };
 }
 
-// ===== 菜单切换 =====
 const tabIndex = document.getElementById('tabIndex');
 const tabTimeline = document.getElementById('tabTimeline');
 function switchTab(which){
@@ -207,7 +211,6 @@ function switchTab(which){
 tabIndex.onclick = () => switchTab('index');
 tabTimeline.onclick = () => switchTab('timeline');
 
-// ===== 上传 =====
 uploadBtn.onclick = () => fileInput.click();
 fileInput.addEventListener('change', async () => {
     const files = Array.from(fileInput.files);
