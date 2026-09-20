@@ -1,6 +1,6 @@
 FROM openresty/openresty:alpine
-# 安装依赖：imagemagick生成缩略图、bcrypt密码哈希
-RUN apk add --no-cache imagemagick bcrypt
+# 修正：bcrypt-cli，不是 bcrypt
+RUN apk add --no-cache imagemagick bcrypt-cli
 WORKDIR /usr/share/nginx/html
 
 # 拷贝前端静态资源

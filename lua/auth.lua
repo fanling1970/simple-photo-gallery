@@ -35,7 +35,7 @@ if ngx.var.uri == "/api/auth" and ngx.req.get_method() == "POST" then
     local username = args.username
     local pass = args.password
     local user = users[username]
-    if user and os.execute("echo '"..pass.."' | bcrypt --verify '"..user.pass.."' >/dev/null") == 0 then
+    if user and os.execute("bcrypt-cli verify '"..pass.."' '"..user.pass.."' >/dev/null 2>&1") == 0 then
         ngx.header["Set-Cookie"] = "token="..username.."; Path=/; Max-Age=86400"
         ngx.print(json.encode({ok=true}))
     else

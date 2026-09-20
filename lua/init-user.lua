@@ -23,8 +23,8 @@ if ngx.req.get_method() == "POST" then
         ngx.print(json.encode({ok=false,msg="用户名/密码长度不足"}))
         return ngx.exit(200)
     end
-    -- bcrypt生成密码哈希
-    local handle = io.popen("bcrypt --hash '"..password.."'")
+    -- bcrypt-cli 生成哈希
+    local handle = io.popen("bcrypt-cli hash '"..password.."'")
     local hash = handle:read("*a"):gsub("\n","")
     handle:close()
     local users = {[username]={pass=hash}}
