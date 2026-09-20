@@ -16,7 +16,7 @@
       <span id="curUser"></span>
       <a href="/api/logout" style="color:#ff7070;text-decoration:none">退出登录</a>
     </div>
-    <input type="file" id="fileInput" accept="image/*" multiple style="display:none">
+    <input type="file" id="fileInput" accept="image/*,video/*" multiple style="display:none">
   </div>
 
   <main class="gallery-container" id="indexView"></main>
@@ -24,7 +24,9 @@
 
   <div class="lightbox" id="lightbox">
     <span class="close-btn" id="closeBtn">&times;</span>
-    <img class="lightbox-img" id="lightboxImg" alt="preview">
+	<span class="nav-btn prev" id="prevBtn">&#10094;</span>
+	<div class="lb-content" id="lbContent"></div>
+    <span class="nav-btn next" id="nextBtn">&#10095;</span>
   </div>
 
   <div id="timelineRail"></div>

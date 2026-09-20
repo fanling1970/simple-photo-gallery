@@ -17,3 +17,11 @@ body{background:#121212;color:#fff;font-family:system-ui,sans-serif}
   transition:opacity .3s;max-height:80vh;overflow-y:auto}
 #timelineRail a{color:#9ecbff;text-decoration:none;cursor:pointer;font-size:14px;white-space:nowrap}
 #timelineRail a:hover{color:#fff}
+.lb-content{position:relative;display:flex;align-items:center;justify-content:center;transition:opacity .2s}
+.lb-content img,.lb-content video{max-width:90vw;max-height:88vh;transition:transform .15s ease;cursor:grab}
+.lb-content:active{cursor:grabbing}
+.nav-btn{position:absolute;top:50%;transform:translateY(-50%);font-size:40px;color:#fff;cursor:pointer;padding:18px;user-select:none;z-index:5;opacity:.7}
+.nav-btn:hover{opacity:1;color:#9ecbff}
+.nav-btn.prev{left:8px}
+.nav-btn.next{right:8px}
+.gallery-item{position:relative}
