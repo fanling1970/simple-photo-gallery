@@ -41,6 +41,18 @@ local function reply(obj)
     return ngx.exit(200)
 end
 
+-- 工具：判断是否媒体文件
+local function is_video(n)
+    return n:match("%.[mM][pP]4$") or n:match("%.[wW][eE][bB][mM]$")
+        or n:match("%.[mM][oO][vV]$") or n:match("%.[mM][kK][vV]$")
+end
+local function is_media(n)
+    if n == "thumb" then return false end
+    return n:match("%.[jJ][pP][eE]?[gG]$") or n:match("%.[pP][nN][gG]$")
+        or n:match("%.[gG][iI][fF]$") or n:match("%.[wW][eE][bB][pP]$")
+        or is_video(n)
+end
+
 local uri = ngx.var.uri
 local method = ngx.req.get_method()
 
@@ -74,20 +86,20 @@ if uri == "/api/auth" and method == "POST" then
     return reply({ok=false, msg="用户名或密码错误"})
 end
 
--- 图片/视频列表（扫描 photos 目录）
+-- 图片/视频列表（新片在前，倒序）
 if uri == "/api/list" then
     local p = io.popen("ls -1 " .. photo_dir .. " 2>/dev/null")
     local out = p:read("*a") p:close()
     local files = {}
-    local function is_media(n)
-        return n:match("%.[jJ][pP][eE]?[gG]$") or n:match("%.[pP][nN][gG]$")
-            or n:match("%.[gG][iI][fF]$") or n:match("%.[wW][eE][bB][pP]$")
-            or n:match("%.[mM][pP]4$") or n:match("%.[wW][eE][bB][mM]$")
-            or n:match("%.[mM][oO][vV]$") or n:match("%.[mM][kK][vV]$")
-    end
     for line in out:gmatch("[^\n]+") do
         if is_media(line) then files[#files+1] = line end
     end
+    table.sort(files, function(a, b)
+        local ta = tonumber(a:match("^(%d+)_")) or 0
+        local tb = tonumber(b:match("^(%d+)_")) or 0
+        if ta ~= tb then return ta > tb end
+        return a > b
+    end)
     return reply(files)
 end
 
@@ -99,15 +111,6 @@ if uri == "/api/timeline" then
         local data = cf:read("*a") cf:close()
         ngx.print(data)
         return ngx.exit(200)
-    end
-    local function is_video(n)
-        return n:match("%.[mM][pP]4$") or n:match("%.[wW][eE][bB][mM]$")
-            or n:match("%.[mM][oO][vV]$") or n:match("%.[mM][kK][vV]$")
-    end
-    local function is_media(n)
-        return n:match("%.[jJ][pP][eE]?[gG]$") or n:match("%.[pP][nN][gG]$")
-            or n:match("%.[gG][iI][fF]$") or n:match("%.[wW][eE][bB][pP]$")
-            or is_video(n)
     end
     local p = io.popen("ls -1 " .. photo_dir .. " 2>/dev/null")
     local out = p:read("*a") p:close()
@@ -140,15 +143,26 @@ if uri == "/api/timeline" then
             table.insert(groups[ym], line)
         end
     end
+    for ym, arr in pairs(groups) do
+        if #arr == 0 then groups[ym] = nil end
+    end
     local wf = io.open(cache_path, "w")
     if wf then wf:write(dkjson.encode(groups)) wf:close() end
     return reply(groups)
 end
 
+-- 图片/视频上传（二进制直传，大文件读临时文件）
 if uri == "/api/upload" and method == "POST" then
     if not is_logged_in() then return reply({ok=false, msg="未登录"}) end
     ngx.req.read_body()
     local data = ngx.req.get_body_data()
+    if not data then
+        local tmpfile = ngx.req.get_body_file()
+        if tmpfile then
+            local tf = io.open(tmpfile, "r")
+            if tf then data = tf:read("*a") tf:close() end
+        end
+    end
     if not data or #data == 0 then return reply({ok=false, msg="未收到文件内容"}) end
     local name = (ngx.var.arg_name or ""):gsub("[^%w%.%-_]", "")
     if name == "" then return reply({ok=false, msg="文件名不合法"}) end
@@ -157,12 +171,11 @@ if uri == "/api/upload" and method == "POST" then
     local f = io.open(photo_dir .. "/" .. final, "wb")
     if not f then return reply({ok=false, msg="无法写入图片目录"}) end
     f:write(data) f:close()
-    local is_v = final:match("%.[mM][pP]4$") or final:match("%.[wW][eE][bB][mM]$")
-              or final:match("%.[mM][oO][vV]$") or final:match("%.[mM][kK][vV]$")
-    if not is_v then
+    if not is_video(final) then
         os.execute(string.format('magick "%s/%s" -resize 400x400 -quality 80 "%s/thumb/%s"', photo_dir, final, photo_dir, final))
     end
     os.execute("rm -f '" .. config_path:gsub("users%.json", "timeline_cache.json") .. "'")
     return reply({ok=true, name=final})
 end
 
+return reply({ok=false, msg="未知接口"})
