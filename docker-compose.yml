@@ -1,0 +1,19 @@
+version: "3.8"
+
+services:
+  gallery:
+    # 镜像地址：替换为你的 GitHub 用户名
+    image: ghcr.io/fanling1970/simple-photo-gallery:latest
+    container_name: photo-gallery
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      # 宿主机图片目录挂载到容器内的 img 路径
+      # 新增图片直接放到宿主机目录即可，无需重建镜像
+      - /opt/photo-images:/usr/share/nginx/html/img
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

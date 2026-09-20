@@ -1,0 +1,20 @@
+# 图片目录（运行时通过 volume 挂载，不提交到仓库）
+img/
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.webp
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 日志
+*.log
