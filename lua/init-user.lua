@@ -1,6 +1,7 @@
 local ngx = require "ngx"
 local json = require "dkjson"
 local io = require "io"
+local bcrypt = require "bcrypt"
 local config_path = "/usr/share/nginx/config/users.json"
 
 local function file_exists(path)
@@ -23,10 +24,8 @@ if ngx.req.get_method() == "POST" then
         ngx.print(json.encode({ok=false,msg="用户名/密码长度不足"}))
         return ngx.exit(200)
     end
-    -- bcrypt-cli 生成哈希
-    local handle = io.popen("bcrypt-cli hash '"..password.."'")
-    local hash = handle:read("*a"):gsub("\n","")
-    handle:close()
+    -- lua-bcrypt生成哈希，不需要调用外部命令
+    local hash = bcrypt.digest(password, 10)
     local users = {[username]={pass=hash}}
     local f = io.open(config_path,"w")
     f:write(json.encode(users))
