@@ -1,7 +1,6 @@
 local ngx = require "ngx"
 local json = require "dkjson"
 local io = require "io"
-local bcrypt = require "bcrypt"
 
 local config_path = "/usr/share/nginx/config/users.json"
 
@@ -36,7 +35,8 @@ if ngx.var.uri == "/api/auth" and ngx.req.get_method() == "POST" then
     local username = args.username
     local pass = args.password
     local user = users[username]
-    if user and bcrypt.verify(pass, user.pass) then
+    local pass_hash = ngx.encode_base16(ngx.sha256_bin(pass)):lower()
+    if user and user.pass == pass_hash then
         ngx.header["Set-Cookie"] = "token="..username.."; Path=/; Max-Age=86400"
         ngx.print(json.encode({ok=true}))
     else

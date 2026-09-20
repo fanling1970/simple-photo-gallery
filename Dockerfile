@@ -1,8 +1,5 @@
 FROM openresty/openresty:alpine
-# 只保留imagemagick，去掉bcrypt相关系统包
 RUN apk add --no-cache imagemagick
-# 安装lua-bcrypt 通过luarocks
-RUN apk add --no-cache luarocks && luarocks install lua-bcrypt
 WORKDIR /usr/share/nginx/html
 
 # 拷贝前端静态资源
