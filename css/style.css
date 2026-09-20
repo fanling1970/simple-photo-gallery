@@ -9,3 +9,11 @@ body{background:#121212;color:#fff;font-family:system-ui,sans-serif}
 .lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);align-items:center;justify-content:center;z-index:999}
 .lightbox img{max-width:92%;max-height:92%;border-radius:6px}
 .close-btn{position:absolute;top:16px;right:24px;font-size:40px;color:#fff;cursor:pointer}
+.tabbtn{background:#333;color:#ddd;border:none;padding:8px 14px;border-radius:6px;cursor:pointer}
+.tabbtn.active{background:#2563eb;color:#fff}
+#timelineRail{position:fixed;right:0;top:50%;transform:translateY(-50%);
+  background:rgba(20,20,20,.92);padding:14px 10px;border-radius:8px 0 0 8px;
+  display:flex;flex-direction:column;gap:10px;z-index:900;opacity:0;
+  transition:opacity .3s;max-height:80vh;overflow-y:auto}
+#timelineRail a{color:#9ecbff;text-decoration:none;cursor:pointer;font-size:14px;white-space:nowrap}
+#timelineRail a:hover{color:#fff}

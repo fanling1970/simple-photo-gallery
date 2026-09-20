@@ -88,6 +88,45 @@ if uri == "/api/list" then
     return reply(files)
 end
 
+-- 时间线：按年月分组（优先EXIF拍摄时间，其次文件名时间戳，最后文件修改时间）
+if uri == "/api/timeline" then
+    local p = io.popen("ls -1 " .. photo_dir .. " 2>/dev/null")
+    local out = p:read("*a") p:close()
+    local groups = {}
+    for line in out:gmatch("[^\n]+") do
+        if line:match("%.[jJ][pP][eE]?[gG]$") or line:match("%.[pP][nN][gG]$")
+           or line:match("%.[gG][iI][fF]$") or line:match("%.[wW][eE][bB][pP]$") then
+            local path = photo_dir .. "/" .. line
+            local ym
+            -- 1) EXIF 拍摄时间  格式 2026:09:20 14:30:00
+            local h = io.popen('identify -format "%[EXIF:DateTimeOriginal]" "' .. path .. '" 2>/dev/null')
+            local exif = h:read("*a") h:close()
+            if exif and exif ~= "" then
+                local y, m = exif:match("(%d+):(%d+):%d+")
+                if y and m then ym = y .. "-" .. m end
+            end
+            -- 2) 文件名时间戳前缀（上传时 os.time()）
+            if not ym then
+                local ts = line:match("^(%d+)_")
+                if ts then
+                    local d = os.date("*t", tonumber(ts))
+                    ym = string.format("%04d-%02d", d.year, d.month)
+                end
+            end
+            -- 3) 文件修改时间
+            if not ym then
+                local h2 = io.popen('ls -l --time-style=+%Y-%m "' .. path .. '" 2>/dev/null')
+                local m = h2:read("*a") h2:close()
+                ym = m:match("(%d%d%d%d%-%d%d)") or "未知"
+            end
+            groups[ym] = groups[ym] or {}
+            table.insert(groups[ym], line)
+        end
+    end
+    return reply(groups)
+end
+
+
 -- 图片上传（二进制直传）
 if uri == "/api/upload" and method == "POST" then
     if not is_logged_in() then return reply({ok=false, msg="未登录"}) end
