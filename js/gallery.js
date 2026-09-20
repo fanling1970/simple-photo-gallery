@@ -1,43 +1,57 @@
-// js/gallery.js
-// 获取Cookie工具函数
 function getCookie(name){
     const arr = document.cookie.match(new RegExp("(^| )"+name+"=([^;]*)(;|$)"));
-    if(arr != null) return unescape(arr[2]);
+    if(arr != null) return decodeURIComponent(arr[2]);
     return null;
 }
-// 页面右上角显示当前登录用户名
-document.getElementById("curUser").innerText = getCookie("token");
+document.getElementById("curUser").innerText = getCookie("token") || "";
 
-// ========== 原有相册图片加载逻辑占位，后续完善图片扫描渲染 ==========
 const galleryEl = document.getElementById('gallery');
 const lightbox = document.getElementById('lightbox');
 const lightboxImg = document.getElementById('lightboxImg');
 const closeBtn = document.getElementById('closeBtn');
+const fileInput = document.getElementById('fileInput');
+const uploadBtn = document.getElementById('uploadBtn');
 
-// 关闭预览弹窗
-closeBtn.addEventListener('click', () => {
-    lightbox.style.display = 'none';
-});
-lightbox.addEventListener('click', (e) => {
-    if(e.target === lightbox) lightbox.style.display = 'none';
-});
+closeBtn.addEventListener('click', () => lightbox.style.display='none');
+lightbox.addEventListener('click', e => { if(e.target===lightbox) lightbox.style.display='none'; });
 
-// 渲染图片列表函数（后续对接后端读取图片/缩略图）
-function renderImages(imgList) {
-    galleryEl.innerHTML = "";
-    imgList.forEach(src => {
-        const card = document.createElement('div');
-        card.className = "gallery-item";
-        card.innerHTML = `<img src="${src}" loading="lazy">`;
-        card.onclick = () => {
-            lightboxImg.src = src;
-            lightbox.style.display = "flex";
-        }
-        galleryEl.appendChild(card);
-    })
+async function loadImages(){
+    try{
+        const res = await fetch('/api/list');
+        const files = await res.json();
+        galleryEl.innerHTML = "";
+        files.forEach(name => {
+            const card = document.createElement('div');
+            card.className = "gallery-item";
+            const img = document.createElement('img');
+            img.src = 'photos/' + encodeURIComponent(name);
+            img.loading = "lazy";
+            card.appendChild(img);
+            card.onclick = () => { lightboxImg.src = img.src; lightbox.style.display='flex'; };
+            galleryEl.appendChild(card);
+        });
+        if(files.length === 0)
+            galleryEl.innerHTML = '<p style="color:#aaa;text-align:center;width:100%">暂无图片，点击右上角「上传图片」</p>';
+    }catch(e){
+        galleryEl.innerHTML = '<p style="color:#f87171;text-align:center;width:100%">加载失败: '+e.message+'</p>';
+    }
 }
 
-// 页面加载，后续在这里调用接口拉取图片列表
-window.onload = function(){
-    // renderImages([]);
-}
+uploadBtn.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', async () => {
+    const files = Array.from(fileInput.files);
+    if(files.length === 0) return;
+    uploadBtn.disabled = true; uploadBtn.innerText = '上传中...';
+    for(const file of files){
+        try{
+            const res = await fetch('/api/upload?name='+encodeURIComponent(file.name), {method:'POST', body:file});
+            const ret = await res.json();
+            if(!ret.ok) alert('上传失败: ' + (ret.msg||''));
+        }catch(e){ alert('上传异常: '+e.message); }
+    }
+    uploadBtn.disabled = false; uploadBtn.innerText = '上传图片';
+    fileInput.value = '';
+    loadImages();
+});
+
+window.onload = loadImages;

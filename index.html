@@ -7,12 +7,14 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <div style="display:flex;justify-content:space-between;align-items:center;padding:16px;color:#fff">
-    <h1>我的相册</h1>
-    <div>
-	    <span id="curUser"></span>
-		<a href="/api/logout" style="margin-left:16px;color:#ff7070;text-decoration:none">退出登录</a>
+  <div style="display:flex;justify-content:space-between;align-items:center;padding:16px;color:#fff;flex-wrap:wrap">
+    <h1 style="margin:0">我的相册</h1>
+    <div style="display:flex;align-items:center;gap:12px">
+      <button id="uploadBtn" style="background:#2563eb;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer">上传图片</button>
+      <span id="curUser"></span>
+      <a href="/api/logout" style="color:#ff7070;text-decoration:none">退出登录</a>
     </div>
+    <input type="file" id="fileInput" accept="image/*" multiple style="display:none">
   </div>
   <header class="header">
     <p class="subtitle">点击图片可放大预览</p>
@@ -20,7 +22,6 @@
   <main class="gallery-container" id="gallery">
     <!-- 图片由 JS 动态渲染 -->
   </main>
-  <!-- 图片预览弹窗 -->
   <div class="lightbox" id="lightbox">
     <span class="close-btn" id="closeBtn">&times;</span>
     <img class="lightbox-img" id="lightboxImg" alt="preview">

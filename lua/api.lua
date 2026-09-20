@@ -3,6 +3,7 @@ local dkjson = require "dkjson"
 local sha2 = require "sha2"
 
 local config_path = "/usr/share/nginx/config/users.json"
+local photo_dir = "/usr/share/nginx/html/photos"
 
 local function exists(p)
     local f = io.open(p, "r")
@@ -28,51 +29,78 @@ end
 
 local function sha(s) return sha2.hex(s) end
 
-
-ngx.req.read_body()
-local args = ngx.req.get_post_args()
-local uri = ngx.var.uri
-
-if ngx.req.get_method() ~= "POST" then
-    ngx.print(dkjson.encode({ok=false, msg="仅支持POST"})) return ngx.exit(200)
+local function is_logged_in()
+    if not exists(config_path) then return false end
+    local token = (ngx.var.http_cookie or ""):match("token=([^;]+)")
+    if not token then return false end
+    return read_users()[token] ~= nil
 end
 
--- 首次初始化管理员（仅当 users.json 不存在）
-if uri == "/api/setup" then
-    if exists(config_path) then
-        ngx.print(dkjson.encode({ok=false, msg="管理员已创建，不可重复初始化"}))
-        return ngx.exit(200)
-    end
-    local username = (args.username or ""):gsub("%s","")
-    local pass = args.password or ""
-    if #username < 1 then
-        ngx.print(dkjson.encode({ok=false, msg="用户名不能为空"})) return ngx.exit(200)
-    end
-    if #pass < 4 then
-        ngx.print(dkjson.encode({ok=false, msg="密码至少4位"})) return ngx.exit(200)
-    end
-    if not write_users({[username]={pass=sha(pass)}}) then
-        ngx.print(dkjson.encode({ok=false, msg="写入失败，请检查 config 目录权限"}))
-        return ngx.exit(200)
-    end
-    ngx.header["Set-Cookie"] = "token="..username.."; Path=/; HttpOnly"
-    ngx.print(dkjson.encode({ok=true}))
+local function reply(obj)
+    ngx.print(dkjson.encode(obj))
     return ngx.exit(200)
 end
 
+local uri = ngx.var.uri
+local method = ngx.req.get_method()
+
+-- 首次初始化管理员
+if uri == "/api/setup" and method == "POST" then
+    if exists(config_path) then return reply({ok=false, msg="管理员已创建，不可重复初始化"}) end
+    ngx.req.read_body()
+    local args = ngx.req.get_post_args()
+    local username = (args.username or ""):gsub("%s","")
+    local pass = args.password or ""
+    if #username < 1 then return reply({ok=false, msg="用户名不能为空"}) end
+    if #pass < 4 then return reply({ok=false, msg="密码至少4位"}) end
+    if not write_users({[username]={pass=sha(pass)}}) then
+        return reply({ok=false, msg="写入失败，请检查 config 目录权限"})
+    end
+    ngx.header["Set-Cookie"] = "token="..username.."; Path=/; HttpOnly"
+    return reply({ok=true})
+end
+
 -- 登录
-if uri == "/api/auth" then
+if uri == "/api/auth" and method == "POST" then
+    ngx.req.read_body()
+    local args = ngx.req.get_post_args()
     local username = (args.username or ""):gsub("%s","")
     local pass = args.password or ""
     local u = read_users()[username]
     if u and u.pass == sha(pass) then
         ngx.header["Set-Cookie"] = "token="..username.."; Path=/; HttpOnly"
-        ngx.print(dkjson.encode({ok=true}))
-    else
-        ngx.print(dkjson.encode({ok=false, msg="用户名或密码错误"}))
+        return reply({ok=true})
     end
-    return ngx.exit(200)
+    return reply({ok=false, msg="用户名或密码错误"})
 end
 
-ngx.print(dkjson.encode({ok=false, msg="未知接口"}))
-return ngx.exit(200)
+-- 图片列表（扫描 photos 目录）
+if uri == "/api/list" then
+    local p = io.popen("ls -1 " .. photo_dir .. " 2>/dev/null")
+    local out = p:read("*a") p:close()
+    local files = {}
+    for line in out:gmatch("[^\n]+") do
+        if line:match("%.[jJ][pP][eE]?[gG]$") or line:match("%.[pP][nN][gG]$")
+           or line:match("%.[gG][iI][fF]$") or line:match("%.[wW][eE][bB][pP]$") then
+            files[#files+1] = line
+        end
+    end
+    return reply(files)
+end
+
+-- 图片上传（二进制直传）
+if uri == "/api/upload" and method == "POST" then
+    if not is_logged_in() then return reply({ok=false, msg="未登录"}) end
+    ngx.req.read_body()
+    local data = ngx.req.get_body_data()
+    if not data or #data == 0 then return reply({ok=false, msg="未收到文件内容"}) end
+    local name = (ngx.var.arg_name or ""):gsub("[^%w%.%-_]", "")
+    if name == "" then return reply({ok=false, msg="文件名不合法"}) end
+    local final = tostring(os.time()) .. "_" .. name   -- 加时间戳防覆盖
+    local f = io.open(photo_dir .. "/" .. final, "wb")
+    if not f then return reply({ok=false, msg="无法写入图片目录"}) end
+    f:write(data) f:close()
+    return reply({ok=true, name=final})
+end
+
+return reply({ok=false, msg="未知接口"})
