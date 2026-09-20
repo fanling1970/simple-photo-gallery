@@ -3,7 +3,7 @@ local dkjson = require "dkjson"
 local sha2 = require "sha2"
 
 local config_path = "/usr/share/nginx/config/users.json"
-local photo_dir = "/usr/share/nginx/html/photos"
+local photo_dir = "/usr/share/nginx/html/photos/images"
 
 local function exists(p)
     local f = io.open(p, "r")
@@ -96,6 +96,7 @@ if uri == "/api/upload" and method == "POST" then
     if not data or #data == 0 then return reply({ok=false, msg="未收到文件内容"}) end
     local name = (ngx.var.arg_name or ""):gsub("[^%w%.%-_]", "")
     if name == "" then return reply({ok=false, msg="文件名不合法"}) end
+	os.execute("mkdir -p " .. photo_dir)
     local final = tostring(os.time()) .. "_" .. name   -- 加时间戳防覆盖
     local f = io.open(photo_dir .. "/" .. final, "wb")
     if not f then return reply({ok=false, msg="无法写入图片目录"}) end

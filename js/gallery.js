@@ -24,7 +24,7 @@ async function loadImages(){
             const card = document.createElement('div');
             card.className = "gallery-item";
             const img = document.createElement('img');
-            img.src = 'photos/' + encodeURIComponent(name);
+            img.src = 'photos/images/' + encodeURIComponent(name);
             img.loading = "lazy";
             card.appendChild(img);
             card.onclick = () => { lightboxImg.src = img.src; lightbox.style.display='flex'; };
