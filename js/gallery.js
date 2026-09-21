@@ -107,20 +107,7 @@ window.addEventListener('mouseup', () => {
     dragging = false;
 });
 
-// ===== 关键：IntersectionObserver，只有真进视口才请求图片 =====
-const io = new IntersectionObserver(entries => {
-    entries.forEach(e => {
-        if(e.isIntersecting){
-            const img = e.target;
-            if(img.dataset.src){
-                img.src = img.dataset.src;
-                delete img.dataset.src;
-            }
-            io.unobserve(img);
-        }
-    });
-}, {rootMargin: '0px 0px 100px 0px'});  // 只预加载屏幕下方100px，不大量预加载
-
+// ===== 卡片：原生loading=lazy =====
 function makeCard(name){
     const card = document.createElement('div');
     card.className = 'gallery-item';
@@ -129,24 +116,41 @@ function makeCard(name){
         card.innerHTML = '<span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;font-size:28px">▶</span>';
     }else{
         const img = document.createElement('img');
-        img.dataset.src = thumbUrl(name);  // data-src，不立即请求
-        img.style.background = '#2a2a2a';
+        img.src = thumbUrl(name);
+        img.loading = 'lazy';
         card.appendChild(img);
-        io.observe(img);
     }
     card.onclick = () => openViewer(name);
     return card;
 }
 
-// ===== 索引图库（全部渲染DOM，图片懒加载）=====
-async function loadIndex(){
-    const res = await fetch('/api/list');
-    viewerList = await res.json();
-    indexView.innerHTML = '';
-    viewerList.forEach(name => indexView.appendChild(makeCard(name)));
+// ===== 索引图库：前端分页，每次渲染40张，滚动到底追加 =====
+let allFiles = [], loadedIdx = 0;
+const BATCH = 40;
+
+async function loadIndex(reset){
+    if(reset){
+        const res = await fetch('/api/list');
+        allFiles = await res.json();
+        loadedIdx = 0;
+        indexView.innerHTML = '';
+    }
+    if(loadedIdx >= allFiles.length) return;
+    const end = Math.min(loadedIdx + BATCH, allFiles.length);
+    for(let i = loadedIdx; i < end; i++){
+        indexView.appendChild(makeCard(allFiles[i]));
+    }
+    loadedIdx = end;
 }
 
-// ===== 时间线图库（全部展开不折叠，图片懒加载）=====
+window.addEventListener('scroll', () => {
+    if(timelineView.style.display !== 'none') return;
+    if(window.innerHeight + window.scrollY >= document.body.scrollHeight - 400){
+        loadIndex(false);
+    }
+});
+
+// ===== 时间线图库：全部展开，原生loading=lazy =====
 let railHideTimer = null;
 function buildRail(years){
     const rail = document.getElementById('timelineRail');
@@ -234,7 +238,7 @@ fileInput.addEventListener('change', async () => {
     }
     uploadBtn.disabled = false; uploadBtn.innerText = '上传图片/视频';
     fileInput.value = '';
-    loadIndex();
+    loadIndex(true);
 });
 
-window.onload = loadIndex;
+window.onload = () => loadIndex(true);
