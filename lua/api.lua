@@ -37,6 +37,7 @@ local function is_logged_in()
 end
 
 local function reply(obj)
+    ngx.header["Cache-Control"] = "no-store, no-cache, must-revalidate"
     ngx.print(dkjson.encode(obj))
     return ngx.exit(200)
 end
@@ -46,7 +47,6 @@ local function is_video(n)
         or n:match("%.[mM][oO][vV]$") or n:match("%.[mM][kK][vV]$")
 end
 
--- 读取文件的拍摄日期 YYYY/MM/DD（优先EXIF，其次mtime）
 local function get_date_dir(path)
     local y, m, d
     local h = io.popen('identify -format "%[EXIF:DateTimeOriginal]" "' .. path .. '" 2>/dev/null')
@@ -66,7 +66,6 @@ local function get_date_dir(path)
     return y .. "/" .. m .. "/" .. d
 end
 
--- 递归列出所有媒体文件（返回相对路径，排除thumb目录）
 local function list_media()
     local cmd = 'find "' .. photo_dir .. '" -type f \\( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" -o -iname "*.webp" -o -iname "*.mp4" -o -iname "*.webm" -o -iname "*.mov" -o -iname "*.mkv" \\) ! -path "*/thumb/*" 2>/dev/null'
     local p = io.popen(cmd)
@@ -74,10 +73,9 @@ local function list_media()
     local prefix = photo_dir .. "/"
     local files = {}
     for line in out:gmatch("[^\n]+") do
-        local rel = line:sub(#prefix + 1)
-        files[#files + 1] = rel
+        files[#files + 1] = line:sub(#prefix + 1)
     end
-    table.sort(files, function(a, b) return a > b end)  -- 路径即日期，倒序=新片在前
+    table.sort(files, function(a, b) return a > b end)
     return files
 end
 
@@ -114,12 +112,12 @@ if uri == "/api/auth" and method == "POST" then
     return reply({ok=false, msg="用户名或密码错误"})
 end
 
--- 列表（倒序）
+-- 列表
 if uri == "/api/list" then
     return reply(list_media())
 end
 
--- 时间线（按 YYYY-MM 分组，直接从相对路径解析）
+-- 时间线
 if uri == "/api/timeline" then
     local files = list_media()
     local groups = {}
@@ -134,7 +132,7 @@ if uri == "/api/timeline" then
     return reply(groups)
 end
 
--- 上传：按拍摄日期自动建年月日目录
+-- 上传
 if uri == "/api/upload" and method == "POST" then
     if not is_logged_in() then return reply({ok=false, msg="未登录"}) end
     ngx.req.read_body()
@@ -150,18 +148,15 @@ if uri == "/api/upload" and method == "POST" then
     local name = (ngx.var.arg_name or ""):gsub("[^%w%.%-_]", "")
     if name == "" then return reply({ok=false, msg="文件名不合法"}) end
 
-    -- 先写临时文件用于识别EXIF
     local tmp = photo_dir .. "/__tmp_" .. tostring(os.time()) .. "_" .. name
     local tf = io.open(tmp, "wb")
     if not tf then return reply({ok=false, msg="无法写入图片目录"}) end
     tf:write(data) tf:close()
 
-    -- 按拍摄日期建目录
     local datadir = get_date_dir(tmp)
     local fulldir = photo_dir .. "/" .. datadir
     os.execute("mkdir -p '" .. fulldir .. "/thumb'")
 
-    -- 保留原文件名；同名则加序号
     local dest = fulldir .. "/" .. name
     local n = 1
     while exists(dest) do
@@ -177,11 +172,12 @@ if uri == "/api/upload" and method == "POST" then
     os.execute('mv "' .. tmp .. '" "' .. dest .. '"')
     local final = dest:sub(#photo_dir + 2)
 
-    -- 生成缩略图（视频暂不生成）
     if not is_video(name) then
         local thumbname = dest:match("([^/]+)$")
         os.execute(string.format('magick "%s" -resize 400x400 -quality 80 "%s/thumb/%s"', dest, fulldir, thumbname))
     end
 
     return reply({ok=true, name=final})
+end
 
+return reply({ok=false, msg="未知接口"})
