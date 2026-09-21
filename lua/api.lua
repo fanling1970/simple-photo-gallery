@@ -4,6 +4,8 @@ local sha2 = require "sha2"
 
 local config_path = "/usr/share/nginx/config/users.json"
 local photo_dir = "/usr/share/nginx/html/photos/images"
+local list_cache = "/usr/share/nginx/config/list_cache.json"
+local timeline_cache = "/usr/share/nginx/config/timeline_cache.json"
 
 local function exists(p)
     local f = io.open(p, "r")
@@ -67,6 +69,12 @@ local function get_date_dir(path)
 end
 
 local function list_media()
+    local cf = io.open(list_cache, "r")
+    if cf then
+        local data = cf:read("*a") cf:close()
+        local files = dkjson.decode(data)
+        if type(files) == "table" then return files end
+    end
     local cmd = 'find "' .. photo_dir .. '" -type f \\( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" -o -iname "*.webp" -o -iname "*.mp4" -o -iname "*.webm" -o -iname "*.mov" -o -iname "*.mkv" \\) ! -path "*/thumb/*" 2>/dev/null'
     local p = io.popen(cmd)
     local out = p:read("*a") p:close()
@@ -76,13 +84,18 @@ local function list_media()
         files[#files + 1] = line:sub(#prefix + 1)
     end
     table.sort(files, function(a, b) return a > b end)
+    local wf = io.open(list_cache, "w")
+    if wf then wf:write(dkjson.encode(files)) wf:close() end
     return files
+end
+
+local function invalidate_cache()
+    os.execute("rm -f '" .. list_cache .. "' '" .. timeline_cache .. "'")
 end
 
 local uri = ngx.var.uri
 local method = ngx.req.get_method()
 
--- 首次初始化管理员
 if uri == "/api/setup" and method == "POST" then
     if exists(config_path) then return reply({ok=false, msg="管理员已创建，不可重复初始化"}) end
     ngx.req.read_body()
@@ -98,7 +111,6 @@ if uri == "/api/setup" and method == "POST" then
     return reply({ok=true})
 end
 
--- 登录
 if uri == "/api/auth" and method == "POST" then
     ngx.req.read_body()
     local args = ngx.req.get_post_args()
@@ -112,13 +124,18 @@ if uri == "/api/auth" and method == "POST" then
     return reply({ok=false, msg="用户名或密码错误"})
 end
 
--- 列表
 if uri == "/api/list" then
     return reply(list_media())
 end
 
--- 时间线
 if uri == "/api/timeline" then
+    local cf = io.open(timeline_cache, "r")
+    if cf then
+        local data = cf:read("*a") cf:close()
+        ngx.header["Cache-Control"] = "no-store"
+        ngx.print(data)
+        return ngx.exit(200)
+    end
     local files = list_media()
     local groups = {}
     for _, rel in ipairs(files) do
@@ -129,10 +146,11 @@ if uri == "/api/timeline" then
             table.insert(groups[ym], rel)
         end
     end
+    local wf = io.open(timeline_cache, "w")
+    if wf then wf:write(dkjson.encode(groups)) wf:close() end
     return reply(groups)
 end
 
--- 上传
 if uri == "/api/upload" and method == "POST" then
     if not is_logged_in() then return reply({ok=false, msg="未登录"}) end
     ngx.req.read_body()
@@ -177,6 +195,7 @@ if uri == "/api/upload" and method == "POST" then
         os.execute(string.format('magick "%s" -resize 400x400 -quality 80 "%s/thumb/%s"', dest, fulldir, thumbname))
     end
 
+    invalidate_cache()
     return reply({ok=true, name=final})
 end
 
