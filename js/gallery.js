@@ -68,7 +68,6 @@ function closeViewer(){
     lbContent.innerHTML = '';
 }
 
-// 同时滑动：老图出、新图进
 function go(dir){
     const old = lbContent.firstChild;
     const nextIndex = (viewerIndex + dir + viewerList.length) % viewerList.length;
@@ -77,7 +76,7 @@ function go(dir){
     el.style.transition = 'none';
     el.style.transform = `translateX(${dir > 0 ? window.innerWidth : -window.innerWidth}px)`;
     lbContent.appendChild(el);
-    void el.offsetWidth; // 强制 reflow
+    void el.offsetWidth;
     el.style.transition = 'transform .3s ease';
     el.style.transform = 'translateX(0) scale(1)';
     if(old){
@@ -96,7 +95,6 @@ lightbox.addEventListener('click', e => { if(e.target === lightbox) closeViewer(
 prevBtn.onclick = e => { e.stopPropagation(); go(-1); };
 nextBtn.onclick = e => { e.stopPropagation(); go(1); };
 
-// 滚轮缩放
 lightbox.addEventListener('wheel', e => {
     e.preventDefault();
     const delta = e.deltaY < 0 ? 1.15 : 0.87;
@@ -104,7 +102,6 @@ lightbox.addEventListener('wheel', e => {
     applyTransform();
 }, {passive:false});
 
-// 拖拽平移 / 点击复位
 lbContent.addEventListener('mousedown', e => {
     e.preventDefault();
     dragging = true; moved = false;
@@ -135,6 +132,7 @@ function makeCard(name){
     }else{
         const img = document.createElement('img');
         img.src = thumbUrl(name);
+        img.loading = 'lazy';
         img.onerror = () => img.src = mediaUrl(name);
         card.appendChild(img);
     }
@@ -142,15 +140,37 @@ function makeCard(name){
     return card;
 }
 
-async function loadIndex(){
-    const res = await fetch('/api/list');
-    viewerList = await res.json();
-    indexView.innerHTML = '';
-    viewerList.forEach(name => indexView.appendChild(makeCard(name)));
-    if(viewerList.length === 0)
-        indexView.innerHTML = '<p style="color:#aaa;text-align:center;width:100%">暂无图片/视频，点右上角上传</p>';
+// ===== 索引图库：分页加载 =====
+let allFiles = [];
+let loadedCount = 0;
+const PAGE = 60;
+let loading = false;
+
+async function loadIndex(reset){
+    if(reset){
+        const res = await fetch('/api/list');
+        allFiles = await res.json();
+        loadedCount = 0;
+        indexView.innerHTML = '';
+    }
+    if(loading || loadedCount >= allFiles.length) return;
+    loading = true;
+    const end = Math.min(loadedCount + PAGE, allFiles.length);
+    for(let i = loadedCount; i < end; i++){
+        indexView.appendChild(makeCard(allFiles[i]));
+    }
+    loadedCount = end;
+    loading = false;
 }
 
+window.addEventListener('scroll', () => {
+    if(timelineView.style.display !== 'none') return;
+    if(window.innerHeight + window.scrollY >= document.body.scrollHeight - 200){
+        loadIndex();
+    }
+});
+
+// ===== 时间线图库：按月折叠 =====
 let railHideTimer = null;
 function buildRail(years){
     const rail = document.getElementById('timelineRail');
@@ -162,29 +182,48 @@ function buildRail(years){
         rail.appendChild(a);
     });
 }
+
+let timelineData = null;
+let timelineBuilt = false;
+
 async function loadTimeline(){
+    if(timelineData) return;
     const res = await fetch('/api/timeline');
-    const groups = await res.json();
+    timelineData = await res.json();
     timelineView.innerHTML = '';
     viewerList = [];
-    const years = Object.keys(groups).sort().reverse();
+    const years = Object.keys(timelineData).sort().reverse();
     years.forEach(ym=>{
         const sec = document.createElement('section');
         sec.id = 'tl-' + ym;
         const h = document.createElement('h2');
-        h.style.cssText = 'padding:24px 16px 0;color:#fff'; h.innerText = ym;
-        sec.appendChild(h);
+        h.style.cssText = 'padding:24px 16px 0;color:#fff;cursor:pointer';
+        h.innerText = ym + ' (' + timelineData[ym].length + '张) ▶';
         const grid = document.createElement('div');
-        grid.className = 'gallery-container';
-        groups[ym].forEach(name=>{
-            viewerList.push(name);
-            grid.appendChild(makeCard(name));
-        });
+        grid.style.display = 'none';
+        h.onclick = () => {
+            if(grid.style.display === 'none'){
+                grid.style.display = '';
+                h.innerText = h.innerText.replace('▶','▼');
+                if(!grid.dataset.loaded){
+                    timelineData[ym].forEach(name=>{
+                        viewerList.push(name);
+                        grid.appendChild(makeCard(name));
+                    });
+                    grid.dataset.loaded = '1';
+                }
+            }else{
+                grid.style.display = 'none';
+                h.innerText = h.innerText.replace('▼','▶');
+            }
+        };
+        sec.appendChild(h);
         sec.appendChild(grid);
         timelineView.appendChild(sec);
     });
     buildRail(years);
 }
+
 function armRailHover(){
     document.onmousemove = e => {
         if(timelineView.style.display === 'none') return;
@@ -198,11 +237,10 @@ function armRailHover(){
     };
 }
 
-let timelineBuilt = false;
-let indexBuilt = false;
-
+// ===== 标签切换 =====
 const tabIndex = document.getElementById('tabIndex');
 const tabTimeline = document.getElementById('tabTimeline');
+let indexBuilt = false;
 
 function switchTab(which){
     const rail = document.getElementById('timelineRail');
@@ -212,7 +250,7 @@ function switchTab(which){
         rail.style.opacity = 0;
         tabIndex.classList.add('active');
         tabTimeline.classList.remove('active');
-        if(!indexBuilt){ loadIndex(); indexBuilt = true; }
+        if(!indexBuilt){ loadIndex(true); indexBuilt = true; }
     }else{
         indexView.style.display = 'none';
         timelineView.style.display = '';
@@ -225,6 +263,7 @@ function switchTab(which){
 tabIndex.onclick = () => switchTab('index');
 tabTimeline.onclick = () => switchTab('timeline');
 
+// ===== 上传 =====
 uploadBtn.onclick = () => fileInput.click();
 fileInput.addEventListener('change', async () => {
     const files = Array.from(fileInput.files);
@@ -239,9 +278,9 @@ fileInput.addEventListener('change', async () => {
     }
     uploadBtn.disabled = false; uploadBtn.innerText = '上传图片/视频';
     fileInput.value = '';
-	indexBuilt = false; timelineBuilt = false;
-    loadIndex();
+    allFiles = []; timelineData = null;
+    indexBuilt = false; timelineBuilt = false;
+    loadIndex(true); indexBuilt = true;
 });
 
-window.onload = () => { loadIndex(); indexBuilt = true; };
-
+window.onload = () => { loadIndex(true); indexBuilt = true; };
