@@ -16,6 +16,11 @@ const indexView = document.getElementById('indexView');
 const timelineView = document.getElementById('timelineView');
 
 const isVideoName = n => /\.(mp4|webm|mov|mkv|avi)$/i.test(n);
+function mediaUrl(relPath){ return 'photos/images/' + relPath; }
+function thumbUrl(relPath){
+    const i = relPath.lastIndexOf('/');
+    return relPath.slice(0, i+1) + 'thumb/' + relPath.slice(i+1);
+}
 
 let viewerList = [], viewerIndex = 0;
 let scale = 1, offX = 0, offY = 0;
@@ -27,7 +32,7 @@ function applyTransform(){
 }
 
 function makeViewerEl(name){
-    const full = 'photos/images/' + encodeURIComponent(name);
+    const full = mediaUrl(name);
     let el;
     if(isVideoName(name)){
         el = document.createElement('video');
@@ -129,9 +134,8 @@ function makeCard(name){
         card.innerHTML = '<span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;font-size:28px">▶</span>';
     }else{
         const img = document.createElement('img');
-        img.src = 'photos/images/thumb/' + encodeURIComponent(name);
-        img.loading = 'lazy';
-        img.onerror = () => img.src = 'photos/images/' + encodeURIComponent(name);
+        img.src = thumbUrl(name);
+        img.onerror = () => img.src = mediaUrl(name);
         card.appendChild(img);
     }
     card.onclick = () => openViewer(name);

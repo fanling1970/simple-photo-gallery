@@ -41,16 +41,44 @@ local function reply(obj)
     return ngx.exit(200)
 end
 
--- 工具：判断是否媒体文件
 local function is_video(n)
     return n:match("%.[mM][pP]4$") or n:match("%.[wW][eE][bB][mM]$")
         or n:match("%.[mM][oO][vV]$") or n:match("%.[mM][kK][vV]$")
 end
-local function is_media(n)
-    if n == "thumb" then return false end
-    return n:match("%.[jJ][pP][eE]?[gG]$") or n:match("%.[pP][nN][gG]$")
-        or n:match("%.[gG][iI][fF]$") or n:match("%.[wW][eE][bB][pP]$")
-        or is_video(n)
+
+-- 读取文件的拍摄日期 YYYY/MM/DD（优先EXIF，其次mtime）
+local function get_date_dir(path)
+    local y, m, d
+    local h = io.popen('identify -format "%[EXIF:DateTimeOriginal]" "' .. path .. '" 2>/dev/null')
+    local exif = h:read("*a") h:close()
+    if exif and exif ~= "" then
+        y, m, d = exif:match("(%d%d%d%d):(%d%d):(%d%d)")
+    end
+    if not y then
+        local h2 = io.popen('stat -c "%y" "' .. path .. '" 2>/dev/null')
+        local mt = h2:read("*a") h2:close()
+        y, m, d = mt:match("(%d%d%d%d)-(%d%d)-(%d%d)")
+    end
+    if not y then
+        local t = os.date("*t")
+        y, m, d = tostring(t.year), string.format("%02d", t.month), string.format("%02d", t.day)
+    end
+    return y .. "/" .. m .. "/" .. d
+end
+
+-- 递归列出所有媒体文件（返回相对路径，排除thumb目录）
+local function list_media()
+    local cmd = 'find "' .. photo_dir .. '" -type f \\( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" -o -iname "*.webp" -o -iname "*.mp4" -o -iname "*.webm" -o -iname "*.mov" -o -iname "*.mkv" \\) ! -path "*/thumb/*" 2>/dev/null'
+    local p = io.popen(cmd)
+    local out = p:read("*a") p:close()
+    local prefix = photo_dir .. "/"
+    local files = {}
+    for line in out:gmatch("[^\n]+") do
+        local rel = line:sub(#prefix + 1)
+        files[#files + 1] = rel
+    end
+    table.sort(files, function(a, b) return a > b end)  -- 路径即日期，倒序=新片在前
+    return files
 end
 
 local uri = ngx.var.uri
@@ -86,72 +114,27 @@ if uri == "/api/auth" and method == "POST" then
     return reply({ok=false, msg="用户名或密码错误"})
 end
 
--- 图片/视频列表（新片在前，倒序）
+-- 列表（倒序）
 if uri == "/api/list" then
-    local p = io.popen("ls -1 " .. photo_dir .. " 2>/dev/null")
-    local out = p:read("*a") p:close()
-    local files = {}
-    for line in out:gmatch("[^\n]+") do
-        if is_media(line) then files[#files+1] = line end
-    end
-    table.sort(files, function(a, b)
-        local ta = tonumber(a:match("^(%d+)_")) or 0
-        local tb = tonumber(b:match("^(%d+)_")) or 0
-        if ta ~= tb then return ta > tb end
-        return a > b
-    end)
-    return reply(files)
+    return reply(list_media())
 end
 
--- 时间线：按年月分组（优先EXIF，其次文件名时间戳，最后文件修改时间），带磁盘缓存
+-- 时间线（按 YYYY-MM 分组，直接从相对路径解析）
 if uri == "/api/timeline" then
-    local cache_path = config_path:gsub("users%.json", "timeline_cache.json")
-    local cf = io.open(cache_path, "r")
-    if cf then
-        local data = cf:read("*a") cf:close()
-        ngx.print(data)
-        return ngx.exit(200)
-    end
-    local p = io.popen("ls -1 " .. photo_dir .. " 2>/dev/null")
-    local out = p:read("*a") p:close()
+    local files = list_media()
     local groups = {}
-    for line in out:gmatch("[^\n]+") do
-        if is_media(line) then
-            local path = photo_dir .. "/" .. line
-            local ym
-            if not is_video(line) then
-                local h = io.popen('identify -format "%[EXIF:DateTimeOriginal]" "' .. path .. '" 2>/dev/null')
-                local exif = h:read("*a") h:close()
-                if exif and exif ~= "" then
-                    local y, m = exif:match("(%d+):(%d+):%d+")
-                    if y and m then ym = y .. "-" .. m end
-                end
-            end
-            if not ym then
-                local ts = line:match("^(%d+)_")
-                if ts then
-                    local d = os.date("*t", tonumber(ts))
-                    ym = string.format("%04d-%02d", d.year, d.month)
-                end
-            end
-            if not ym then
-                local h2 = io.popen('ls -l --time-style=+%Y-%m "' .. path .. '" 2>/dev/null')
-                local m = h2:read("*a") h2:close()
-                ym = m:match("(%d%d%d%d%-%d%d)") or "未知"
-            end
+    for _, rel in ipairs(files) do
+        local y, m = rel:match("^(%d%d%d%d)/(%d%d)/")
+        if y and m then
+            local ym = y .. "-" .. m
             groups[ym] = groups[ym] or {}
-            table.insert(groups[ym], line)
+            table.insert(groups[ym], rel)
         end
     end
-    for ym, arr in pairs(groups) do
-        if #arr == 0 then groups[ym] = nil end
-    end
-    local wf = io.open(cache_path, "w")
-    if wf then wf:write(dkjson.encode(groups)) wf:close() end
     return reply(groups)
 end
 
--- 图片/视频上传（二进制直传，大文件读临时文件）
+-- 上传：按拍摄日期自动建年月日目录
 if uri == "/api/upload" and method == "POST" then
     if not is_logged_in() then return reply({ok=false, msg="未登录"}) end
     ngx.req.read_body()
@@ -166,16 +149,39 @@ if uri == "/api/upload" and method == "POST" then
     if not data or #data == 0 then return reply({ok=false, msg="未收到文件内容"}) end
     local name = (ngx.var.arg_name or ""):gsub("[^%w%.%-_]", "")
     if name == "" then return reply({ok=false, msg="文件名不合法"}) end
-    os.execute("mkdir -p " .. photo_dir .. "/thumb")
-    local final = tostring(os.time()) .. "_" .. name
-    local f = io.open(photo_dir .. "/" .. final, "wb")
-    if not f then return reply({ok=false, msg="无法写入图片目录"}) end
-    f:write(data) f:close()
-    if not is_video(final) then
-        os.execute(string.format('magick "%s/%s" -resize 400x400 -quality 80 "%s/thumb/%s"', photo_dir, final, photo_dir, final))
-    end
-    os.execute("rm -f '" .. config_path:gsub("users%.json", "timeline_cache.json") .. "'")
-    return reply({ok=true, name=final})
-end
 
-return reply({ok=false, msg="未知接口"})
+    -- 先写临时文件用于识别EXIF
+    local tmp = photo_dir .. "/__tmp_" .. tostring(os.time()) .. "_" .. name
+    local tf = io.open(tmp, "wb")
+    if not tf then return reply({ok=false, msg="无法写入图片目录"}) end
+    tf:write(data) tf:close()
+
+    -- 按拍摄日期建目录
+    local datadir = get_date_dir(tmp)
+    local fulldir = photo_dir .. "/" .. datadir
+    os.execute("mkdir -p '" .. fulldir .. "/thumb'")
+
+    -- 保留原文件名；同名则加序号
+    local dest = fulldir .. "/" .. name
+    local n = 1
+    while exists(dest) do
+        local base, ext = name:match("^(.-)(%.[^%.]+)$")
+        if base then
+            dest = fulldir .. "/" .. base .. "_" .. n .. ext
+        else
+            dest = fulldir .. "/" .. name .. "_" .. n
+        end
+        n = n + 1
+    end
+
+    os.execute('mv "' .. tmp .. '" "' .. dest .. '"')
+    local final = dest:sub(#photo_dir + 2)
+
+    -- 生成缩略图（视频暂不生成）
+    if not is_video(name) then
+        local thumbname = dest:match("([^/]+)$")
+        os.execute(string.format('magick "%s" -resize 400x400 -quality 80 "%s/thumb/%s"', dest, fulldir, thumbname))
+    end
+
+    return reply({ok=true, name=final})
+
