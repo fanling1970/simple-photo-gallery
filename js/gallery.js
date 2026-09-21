@@ -198,18 +198,28 @@ function armRailHover(){
     };
 }
 
+let timelineBuilt = false;
+let indexBuilt = false;
+
 const tabIndex = document.getElementById('tabIndex');
 const tabTimeline = document.getElementById('tabTimeline');
+
 function switchTab(which){
     const rail = document.getElementById('timelineRail');
     if(which === 'index'){
-        indexView.style.display = ''; timelineView.style.display = 'none';
+        indexView.style.display = '';
+        timelineView.style.display = 'none';
         rail.style.opacity = 0;
-        tabIndex.classList.add('active'); tabTimeline.classList.remove('active');
+        tabIndex.classList.add('active');
+        tabTimeline.classList.remove('active');
+        if(!indexBuilt){ loadIndex(); indexBuilt = true; }
     }else{
-        indexView.style.display = 'none'; timelineView.style.display = '';
-        tabIndex.classList.remove('active'); tabTimeline.classList.add('active');
-        loadTimeline(); armRailHover();
+        indexView.style.display = 'none';
+        timelineView.style.display = '';
+        tabIndex.classList.remove('active');
+        tabTimeline.classList.add('active');
+        if(!timelineBuilt){ loadTimeline(); timelineBuilt = true; }
+        armRailHover();
     }
 }
 tabIndex.onclick = () => switchTab('index');
@@ -229,7 +239,9 @@ fileInput.addEventListener('change', async () => {
     }
     uploadBtn.disabled = false; uploadBtn.innerText = '上传图片/视频';
     fileInput.value = '';
+	indexBuilt = false; timelineBuilt = false;
     loadIndex();
 });
 
-window.onload = loadIndex;
+window.onload = () => { loadIndex(); indexBuilt = true; };
+
