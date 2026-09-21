@@ -25,3 +25,7 @@ body{background:#121212;color:#fff;font-family:system-ui,sans-serif}
 .nav-btn.prev{left:8px}
 .nav-btn.next{right:8px}
 .gallery-item{position:relative}
+.gallery-item {
+    content-visibility: auto;
+    contain-intrinsic-size: 200px;
+}

@@ -122,7 +122,6 @@ window.addEventListener('mouseup', () => {
     dragging = false;
 });
 
-// ===== 卡片 =====
 function makeCard(name){
     const card = document.createElement('div');
     card.className = 'gallery-item';
@@ -140,37 +139,15 @@ function makeCard(name){
     return card;
 }
 
-// ===== 索引图库：分页加载 =====
-let allFiles = [];
-let loadedCount = 0;
-const PAGE = 60;
-let loading = false;
-
-async function loadIndex(reset){
-    if(reset){
-        const res = await fetch('/api/list');
-        allFiles = await res.json();
-        loadedCount = 0;
-        indexView.innerHTML = '';
-    }
-    if(loading || loadedCount >= allFiles.length) return;
-    loading = true;
-    const end = Math.min(loadedCount + PAGE, allFiles.length);
-    for(let i = loadedCount; i < end; i++){
-        indexView.appendChild(makeCard(allFiles[i]));
-    }
-    loadedCount = end;
-    loading = false;
+// ===== 索引图库 =====
+async function loadIndex(){
+    const res = await fetch('/api/list');
+    viewerList = await res.json();
+    indexView.innerHTML = '';
+    viewerList.forEach(name => indexView.appendChild(makeCard(name)));
 }
 
-window.addEventListener('scroll', () => {
-    if(timelineView.style.display !== 'none') return;
-    if(window.innerHeight + window.scrollY >= document.body.scrollHeight - 200){
-        loadIndex();
-    }
-});
-
-// ===== 时间线图库：按月折叠 =====
+// ===== 时间线图库 =====
 let railHideTimer = null;
 function buildRail(years){
     const rail = document.getElementById('timelineRail');
@@ -183,41 +160,25 @@ function buildRail(years){
     });
 }
 
-let timelineData = null;
-let timelineBuilt = false;
-
 async function loadTimeline(){
-    if(timelineData) return;
     const res = await fetch('/api/timeline');
-    timelineData = await res.json();
+    const groups = await res.json();
     timelineView.innerHTML = '';
     viewerList = [];
-    const years = Object.keys(timelineData).sort().reverse();
+    const years = Object.keys(groups).sort().reverse();
     years.forEach(ym=>{
         const sec = document.createElement('section');
         sec.id = 'tl-' + ym;
         const h = document.createElement('h2');
-        h.style.cssText = 'padding:24px 16px 0;color:#fff;cursor:pointer';
-        h.innerText = ym + ' (' + timelineData[ym].length + '张) ▶';
-        const grid = document.createElement('div');
-        grid.style.display = 'none';
-        h.onclick = () => {
-            if(grid.style.display === 'none'){
-                grid.style.display = '';
-                h.innerText = h.innerText.replace('▶','▼');
-                if(!grid.dataset.loaded){
-                    timelineData[ym].forEach(name=>{
-                        viewerList.push(name);
-                        grid.appendChild(makeCard(name));
-                    });
-                    grid.dataset.loaded = '1';
-                }
-            }else{
-                grid.style.display = 'none';
-                h.innerText = h.innerText.replace('▼','▶');
-            }
-        };
+        h.style.cssText = 'padding:24px 16px 0;color:#fff';
+        h.innerText = ym;
         sec.appendChild(h);
+        const grid = document.createElement('div');
+        grid.className = 'gallery-container';
+        groups[ym].forEach(name=>{
+            viewerList.push(name);
+            grid.appendChild(makeCard(name));
+        });
         sec.appendChild(grid);
         timelineView.appendChild(sec);
     });
@@ -237,10 +198,8 @@ function armRailHover(){
     };
 }
 
-// ===== 标签切换 =====
 const tabIndex = document.getElementById('tabIndex');
 const tabTimeline = document.getElementById('tabTimeline');
-let indexBuilt = false;
 
 function switchTab(which){
     const rail = document.getElementById('timelineRail');
@@ -250,20 +209,18 @@ function switchTab(which){
         rail.style.opacity = 0;
         tabIndex.classList.add('active');
         tabTimeline.classList.remove('active');
-        if(!indexBuilt){ loadIndex(true); indexBuilt = true; }
     }else{
         indexView.style.display = 'none';
         timelineView.style.display = '';
         tabIndex.classList.remove('active');
         tabTimeline.classList.add('active');
-        if(!timelineBuilt){ loadTimeline(); timelineBuilt = true; }
+        loadTimeline();
         armRailHover();
     }
 }
 tabIndex.onclick = () => switchTab('index');
 tabTimeline.onclick = () => switchTab('timeline');
 
-// ===== 上传 =====
 uploadBtn.onclick = () => fileInput.click();
 fileInput.addEventListener('change', async () => {
     const files = Array.from(fileInput.files);
@@ -278,9 +235,7 @@ fileInput.addEventListener('change', async () => {
     }
     uploadBtn.disabled = false; uploadBtn.innerText = '上传图片/视频';
     fileInput.value = '';
-    allFiles = []; timelineData = null;
-    indexBuilt = false; timelineBuilt = false;
-    loadIndex(true); indexBuilt = true;
+    loadIndex();
 });
 
-window.onload = () => { loadIndex(true); indexBuilt = true; };
+window.onload = loadIndex;
