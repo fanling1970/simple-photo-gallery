@@ -16,11 +16,8 @@ const indexView = document.getElementById('indexView');
 const timelineView = document.getElementById('timelineView');
 
 const isVideoName = n => /\.(mp4|webm|mov|mkv|avi)$/i.test(n);
-function mediaUrl(relPath){ return 'photos/images/' + relPath; }
-function thumbUrl(relPath){
-    const i = relPath.lastIndexOf('/');
-    return relPath.slice(0, i+1) + 'thumb/' + relPath.slice(i+1);
-}
+function mediaUrl(p){ return 'photos/images/' + p; }
+function thumbUrl(p){ const i=p.lastIndexOf('/'); return p.slice(0,i+1)+'thumb/'+p.slice(i+1); }
 
 let viewerList = [], viewerIndex = 0;
 let scale = 1, offX = 0, offY = 0;
@@ -32,14 +29,13 @@ function applyTransform(){
 }
 
 function makeViewerEl(name){
-    const full = mediaUrl(name);
     let el;
     if(isVideoName(name)){
         el = document.createElement('video');
-        el.src = full; el.controls = true; el.autoplay = true;
+        el.src = mediaUrl(name); el.controls = true; el.autoplay = true;
     }else{
         el = document.createElement('img');
-        el.src = full;
+        el.src = mediaUrl(name);
     }
     el.className = 'lightbox-img';
     el.draggable = false;
@@ -48,9 +44,8 @@ function makeViewerEl(name){
 }
 
 function renderViewer(){
-    const name = viewerList[viewerIndex];
     lbContent.innerHTML = '';
-    const el = makeViewerEl(name);
+    const el = makeViewerEl(viewerList[viewerIndex]);
     lbContent.appendChild(el);
     scale = 1; offX = 0; offY = 0;
     applyTransform();
@@ -70,9 +65,8 @@ function closeViewer(){
 
 function go(dir){
     const old = lbContent.firstChild;
-    const nextIndex = (viewerIndex + dir + viewerList.length) % viewerList.length;
-    const name = viewerList[nextIndex];
-    const el = makeViewerEl(name);
+    viewerIndex = (viewerIndex + dir + viewerList.length) % viewerList.length;
+    const el = makeViewerEl(viewerList[viewerIndex]);
     el.style.transition = 'none';
     el.style.transform = `translateX(${dir > 0 ? window.innerWidth : -window.innerWidth}px)`;
     lbContent.appendChild(el);
@@ -83,11 +77,7 @@ function go(dir){
         old.style.transition = 'transform .3s ease';
         old.style.transform = `translateX(${dir > 0 ? -window.innerWidth : window.innerWidth}px)`;
     }
-    setTimeout(()=>{
-        if(old) old.remove();
-        viewerIndex = nextIndex;
-        scale = 1; offX = 0; offY = 0;
-    }, 320);
+    setTimeout(()=>{ if(old) old.remove(); scale=1; offX=0; offY=0; }, 320);
 }
 
 closeBtn.onclick = closeViewer;
@@ -97,14 +87,12 @@ nextBtn.onclick = e => { e.stopPropagation(); go(1); };
 
 lightbox.addEventListener('wheel', e => {
     e.preventDefault();
-    const delta = e.deltaY < 0 ? 1.15 : 0.87;
-    scale = Math.min(5, Math.max(1, scale * delta));
+    scale = Math.min(5, Math.max(1, scale * (e.deltaY < 0 ? 1.15 : 0.87)));
     applyTransform();
 }, {passive:false});
 
 lbContent.addEventListener('mousedown', e => {
-    e.preventDefault();
-    dragging = true; moved = false;
+    e.preventDefault(); dragging = true; moved = false;
     startX = e.clientX - offX; startY = e.clientY - offY;
 });
 lbContent.addEventListener('dragstart', e => e.preventDefault());
@@ -112,15 +100,26 @@ window.addEventListener('mousemove', e => {
     if(!dragging) return;
     const dx = e.clientX - startX, dy = e.clientY - startY;
     if(Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
-    offX = dx; offY = dy;
-    applyTransform();
+    offX = dx; offY = dy; applyTransform();
 });
 window.addEventListener('mouseup', () => {
-    if(dragging && !moved && scale > 1){
-        scale = 1; offX = 0; offY = 0; applyTransform();
-    }
+    if(dragging && !moved && scale > 1){ scale=1; offX=0; offY=0; applyTransform(); }
     dragging = false;
 });
+
+// ===== 关键：IntersectionObserver，只有真进视口才请求图片 =====
+const io = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+        if(e.isIntersecting){
+            const img = e.target;
+            if(img.dataset.src){
+                img.src = img.dataset.src;
+                delete img.dataset.src;
+            }
+            io.unobserve(img);
+        }
+    });
+}, {rootMargin: '0px 0px 100px 0px'});  // 只预加载屏幕下方100px，不大量预加载
 
 function makeCard(name){
     const card = document.createElement('div');
@@ -130,16 +129,16 @@ function makeCard(name){
         card.innerHTML = '<span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;font-size:28px">▶</span>';
     }else{
         const img = document.createElement('img');
-        img.src = thumbUrl(name);
-        img.loading = 'lazy';
-        img.onerror = () => img.src = mediaUrl(name);
+        img.dataset.src = thumbUrl(name);  // data-src，不立即请求
+        img.style.background = '#2a2a2a';
         card.appendChild(img);
+        io.observe(img);
     }
     card.onclick = () => openViewer(name);
     return card;
 }
 
-// ===== 索引图库 =====
+// ===== 索引图库（全部渲染DOM，图片懒加载）=====
 async function loadIndex(){
     const res = await fetch('/api/list');
     viewerList = await res.json();
@@ -147,7 +146,7 @@ async function loadIndex(){
     viewerList.forEach(name => indexView.appendChild(makeCard(name)));
 }
 
-// ===== 时间线图库 =====
+// ===== 时间线图库（全部展开不折叠，图片懒加载）=====
 let railHideTimer = null;
 function buildRail(years){
     const rail = document.getElementById('timelineRail');
